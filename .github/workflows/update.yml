@@ -27,6 +27,11 @@ jobs:
       - run: pip install -r requirements.txt
       - name: Python-Tests
         run: python -m unittest discover -s tests -v
+      - name: WebUntis Probe (Oktoberwoche)
+        env:
+          UNTIS_USERNAME: ${{ secrets.UNTIS_USERNAME }}
+          UNTIS_PASSWORD: ${{ secrets.UNTIS_PASSWORD }}
+        run: python main.py --probe
       - name: Stundenplan lesen und ICS erzeugen
         env:
           UNTIS_USERNAME: ${{ secrets.UNTIS_USERNAME }}
