@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.env
+.venv/
+diagnostics/
+docs/
+!docs/.gitkeep
