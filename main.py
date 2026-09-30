@@ -220,9 +220,12 @@ def login_fetch(cfg, start, end):
         # Avoid getKlassen: FK04 currently returns a schoolyear-null error on that RPC.
         # The class ID was taken from the publicly visible 12ME timetable URL.
         class_id = int(cfg["class_id"])
-        for monday in mondays(start, end):
+        # FK04's teaching timetable currently ends on 22 January 2027.
+        # Requests crossing that server-side boundary fail as DateNotAllowed.
+        teaching_end = date(2027, 1, 22)
+        for monday in mondays(start, min(end, teaching_end)):
             week_start = max(monday, start)
-            week_end = min(monday + timedelta(days=6), end)
+            week_end = min(monday + timedelta(days=6), end, teaching_end)
             try:
                 periods = session.timetable_extended(start=week_start,
                           end=week_end, klasse=class_id)
