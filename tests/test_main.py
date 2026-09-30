@@ -22,6 +22,36 @@ class CalendarTests(unittest.TestCase):
         calendar=main.ical([(event,"Felder und Wellen")])
         for term in ("BEGIN:VCALENDAR","BEGIN:VEVENT","UID:","DTSTART:20261012T070000Z","SUMMARY:Felder und Wellen","LOCATION:R2.001"):
             self.assertIn(term,calendar)
+    def test_lecture_blocks_and_room_in_title(self):
+        tz=ZoneInfo("Europe/Berlin")
+        d=datetime(2026,10,6,9,tzinfo=tz)
+        def event(start_min, end_min, room):
+            return {"start":d+timedelta(minutes=start_min),
+                    "end":d+timedelta(minutes=end_min),
+                    "rooms":[room],"teachers":[],"lesson":"27","note":""}
+        classes=[(event(0,45,"R3.012"),"Batterien und Brennstoffzellen"),
+                 (event(60,105,"R3.012"),"Batterien und Brennstoffzellen"),
+                 (event(120,165,"R3.012"),"Batterien und Brennstoffzellen")]
+        blocks=main.merge_lessons(classes)
+        self.assertEqual(len(blocks),1)
+        self.assertEqual(blocks[0][0]["end"],d+timedelta(minutes=165))
+        calendar=main.ical(blocks)
+        self.assertEqual(calendar.count("BEGIN:VEVENT"),1)
+        self.assertIn("SUMMARY:R3.012 · Batterien und Brennstoffzellen",calendar)
+        self.assertIn("LOCATION:R3.012",calendar)
+    def test_room_changes_and_long_breaks_remain_separate(self):
+        tz=ZoneInfo("Europe/Berlin")
+        d=datetime(2026,10,6,9,tzinfo=tz)
+        def event(start_min, end_min, room):
+            return {"start":d+timedelta(minutes=start_min),
+                    "end":d+timedelta(minutes=end_min),
+                    "rooms":[room],"teachers":[],"lesson":"27","note":""}
+        lessons=[(event(0,45,"R3.012"),"Felder und Wellen"),
+                 (event(45,90,"R2.093"),"Felder und Wellen"),
+                 (event(150,195,"R3.012"),"Felder und Wellen")]
+        self.assertEqual(len(main.merge_lessons(lessons)),3)
+    def test_prefer_short_room_codes(self):
+        self.assertEqual(main.room_names([SimpleNamespace(name="R2.093",long_name="Raum 2.093")]),["R2.093"])
     def test_cancelled(self):
         self.assertTrue(main.cancelled(SimpleNamespace(code="cancelled")))
         self.assertFalse(main.cancelled(SimpleNamespace(code="",cancelled=False)))
