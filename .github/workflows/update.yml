@@ -1,6 +1,8 @@
 name: FK04 Kalender aktualisieren
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
   schedule:
     - cron: '17 */3 * * *'
 permissions:
