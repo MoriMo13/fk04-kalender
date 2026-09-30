@@ -20,7 +20,7 @@ class CalendarTests(unittest.TestCase):
         d=datetime(2026,10,12,9,tzinfo=ZoneInfo("Europe/Berlin"))
         event={"start":d,"end":d+timedelta(minutes=90),"rooms":["R2.001"],"teachers":["Prof. Beispiel"],"lesson":"27","note":""}
         calendar=main.ical([(event,"Felder und Wellen")])
-        for term in ("BEGIN:VCALENDAR","BEGIN:VEVENT","UID:","DTSTART:20261012T070000Z","SUMMARY:Felder und Wellen","LOCATION:R2.001"):
+        for term in ("BEGIN:VCALENDAR","BEGIN:VEVENT","UID:","DTSTART:20261012T070000Z","SUMMARY:R2.001 · Felder und Wellen","LOCATION:R2.001"):
             self.assertIn(term,calendar)
     def test_lecture_blocks_and_room_in_title(self):
         tz=ZoneInfo("Europe/Berlin")
