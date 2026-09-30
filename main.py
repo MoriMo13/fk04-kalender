@@ -95,6 +95,117 @@ def public_fetch(cfg, start, end):
             for monday in mondays(start, end)
             for p in client.fetch_week(class_id=int(cfg["class_id"]), date=monday).periods]
 
+
+def legacy_public_parse(payload, tz):
+    """Accept the nested JSON structures used by the older public weekly API.
+
+    Fail closed if subject names cannot be resolved; never publish anonymous
+    identifiers or unrelated class entries as a seemingly valid calendar.
+    """
+    elements = {}
+    periods = []
+    def walk(obj):
+        if isinstance(obj, list):
+            for child in obj:
+                walk(child)
+            return
+        if not isinstance(obj, dict):
+            return
+        if {"id", "type"} <= obj.keys() and ("name" in obj or "longName" in obj):
+            keys = [str(obj["type"]), str(obj["id"])]
+            elements[tuple(keys)] = str(obj.get("longName") or obj.get("name") or "")
+        if all(k in obj for k in ("date", "startTime", "endTime")):
+            periods.append(obj)
+            return
+        for value in obj.values():
+            walk(value)
+    walk(payload)
+    result = []
+    for p in periods:
+        def by_type(number, attribute):
+            out = []
+            for v in p.get(attribute) or []:
+                if isinstance(v, str):
+                    out.append(v)
+                elif isinstance(v, dict):
+                    name = v.get("longName") or v.get("name") or v.get("shortName")
+                    if not name:
+                        name = elements.get((str(v.get("type", number)), str(v.get("id"))))
+                    if name:
+                        out.append(str(name))
+            for el in p.get("elements") or []:
+                if not isinstance(el, dict) or str(el.get("type")) != str(number):
+                    continue
+                value = el.get("longName") or el.get("name") or elements.get((str(number), str(el.get("id"))))
+                if value:
+                    out.append(str(value))
+            return list(dict.fromkeys(out))
+        subjects = by_type(3, "subjects")
+        rooms = by_type(4, "rooms")
+        teachers = by_type(2, "teachers")
+        start = localized(p["date"], p["startTime"], tz)
+        end = localized(p["date"], p["endTime"], tz)
+        if end <= start:
+            end += timedelta(days=1)
+        result.append(dict(start=start, end=end, subjects=subjects,
+            rooms=rooms, teachers=teachers, lesson=str(p.get("lessonId") or p.get("id") or ""),
+            cancelled=p.get("code") in ("cancelled", "CANCELLED") or
+                      p.get("cellState") in ("CANCELLED", "CANCELED") or
+                      p.get("isCancelled", False) is True,
+            note=str(p.get("substText") or p.get("periodText") or "")))
+    return result
+
+def legacy_public_fetch(cfg, start, end):
+    """Try WebUntis's earlier, undocumented public weekly endpoint.
+
+    Untis may disable this API; a 404 is not interpreted as valid empty data.
+    """
+    import requests
+    from time import sleep
+    tz = ZoneInfo(cfg["timezone"])
+    hostname = cfg["server"].strip("/")
+    suffix = "/api/public/timetable/weekly/data"
+    base_paths = [f"https://{hostname}/WebUntis{suffix}",
+                  f"https://{hostname}{suffix}"]
+    session = requests.Session()
+    session.headers.update({"User-Agent": "FK04-12ME-PersonalCalendar/1.0",
+                            "Accept": "application/json"})
+    probe_day = date(2026, 10, 12)
+    params = dict(elementType=1, elementId=cfg["class_id"],
+                  date=probe_day.isoformat(), formatId=1)
+    errors = []
+    selected_path = None
+    probe_rows = None
+    for url in base_paths:
+        try:
+            response = session.get(url, params=params, timeout=15)
+            response.raise_for_status()
+            probe_rows = legacy_public_parse(response.json(), tz)
+            if not probe_rows:
+                raise ValueError("Antwort hat keine lesbaren Unterrichtseinträge")
+            if not any(e["subjects"] for e in probe_rows):
+                raise ValueError("Unterricht vorhanden, aber keine auflösbaren Fachnamen")
+            selected_path = url
+            break
+        except Exception as exc:
+            errors.append(f"{url}: {type(exc).__name__} {exc}")
+    if selected_path is None:
+        raise RuntimeError("Legacy-API nicht nutzbar: " + " | ".join(errors))
+    results = []
+    for monday in mondays(start, end):
+        if monday == probe_day:
+            rows = probe_rows
+        else:
+            response = session.get(selected_path,
+                params={**params, "date": monday.isoformat()}, timeout=15)
+            response.raise_for_status()
+            rows = legacy_public_parse(response.json(), tz)
+            if rows and not any(e["subjects"] for e in rows):
+                raise ValueError(f"Keine lesbaren Fachnamen in Woche {monday}")
+        results.extend(rows)
+        sleep(0.25)
+    return results
+
 def login_fetch(cfg, start, end):
     import webuntis
     username = os.getenv("UNTIS_USERNAME", "")
@@ -117,7 +228,7 @@ def login_fetch(cfg, start, end):
 
 def fetch(cfg, start, end):
     errors = []
-    for method, fn in (("public", public_fetch), ("login", login_fetch)):
+    for method, fn in (("public-modern", public_fetch), ("public-legacy", legacy_public_fetch), ("login", login_fetch)):
         if method == "login" and not (os.getenv("UNTIS_USERNAME") and os.getenv("UNTIS_PASSWORD")):
             errors.append("login: Secrets nicht hinterlegt")
             continue
