@@ -217,12 +217,12 @@ def login_fetch(cfg, start, end):
     with webuntis.Session(server=cfg["server"], school=cfg["school"],
                          username=username, password=password,
                          useragent="FK04-12ME-Personal-Calendar/1.0").login() as session:
-        matches = [c for c in session.klassen() if str(c.name).casefold() == cfg["class_name"].casefold()]
-        if len(matches) != 1:
-            raise RuntimeError("Klasse 12ME nicht eindeutig im WebUntis-Login gefunden")
+        # Avoid getKlassen: FK04 currently returns a schoolyear-null error on that RPC.
+        # The class ID was taken from the publicly visible 12ME timetable URL.
+        class_id = int(cfg["class_id"])
         for monday in mondays(start, end):
             periods = session.timetable_extended(start=monday,
-                      end=min(monday + timedelta(days=6), end), klasse=matches[0].id)
+                      end=min(monday + timedelta(days=6), end), klasse=class_id)
             result.extend(row(p, "login", tz) for p in periods)
     return result
 
