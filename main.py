@@ -221,8 +221,15 @@ def login_fetch(cfg, start, end):
         # The class ID was taken from the publicly visible 12ME timetable URL.
         class_id = int(cfg["class_id"])
         for monday in mondays(start, end):
-            periods = session.timetable_extended(start=max(monday, start),
-                      end=min(monday + timedelta(days=6), end), klasse=class_id)
+            week_start = max(monday, start)
+            week_end = min(monday + timedelta(days=6), end)
+            try:
+                periods = session.timetable_extended(start=week_start,
+                          end=week_end, klasse=class_id)
+            except webuntis.errors.DateNotAllowed as exc:
+                print(f"WARNUNG: Woche {week_start} bis {week_end} von WebUntis "
+                      f"wegen Schuljahresgrenze abgelehnt: {exc}", flush=True)
+                continue
             result.extend(row(p, "login", tz) for p in periods)
     return result
 
