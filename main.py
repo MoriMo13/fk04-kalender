@@ -30,6 +30,22 @@ def names(items):
                 out.append(str(value))
     return out
 
+
+def room_names(items):
+    """Return the short classroom codes instead of long/short duplicates."""
+    out = []
+    for obj in items or ():
+        if isinstance(obj, str):
+            value = obj
+        else:
+            value = (getattr(obj, "name", None)
+                     or getattr(obj, "short_name", None)
+                     or getattr(obj, "long_name", None))
+        value = str(value or "").strip()
+        if value and value not in out:
+            out.append(value)
+    return out
+
 def course_for(subjects, courses):
     for course, aliases in courses.items():
         for subject in subjects:
@@ -75,7 +91,7 @@ def row(period, source, tz):
     if end <= start:
         end += timedelta(days=1)
     return dict(start=start, end=end, subjects=names(getattr(period, "subjects", [])),
-                rooms=names(getattr(period, "rooms", [])),
+                rooms=room_names(getattr(period, "rooms", [])),
                 teachers=[] if source == "login" else names(getattr(period, "teachers", [])),
                 lesson=str(lesson or getattr(period, "id", "") or ""),
                 cancelled=cancelled(period),
@@ -269,6 +285,42 @@ def fold(line):
     parts.append(chunk)
     return "\r\n".join(parts)
 
+
+def merge_lessons(events, max_break_minutes=20):
+    """Join successive 45-minute lessons into course blocks.
+
+    Only merge entries on the same date, with the same subject AND room.
+    Include ordinary 10/15/20-minute lecture breaks in the continuous block,
+    but do not bridge longer gaps or room changes.
+    """
+    buckets = defaultdict(list)
+    for event, course in events:
+        room_key = tuple(sorted(norm(room) for room in event.get("rooms", []) if room))
+        buckets[(event["start"].date(), course, room_key)].append(event)
+
+    blocks = []
+    max_break = timedelta(minutes=max_break_minutes)
+    for (_, course, _), entries in buckets.items():
+        current = None
+        notes = []
+        for entry in sorted(entries, key=lambda x: (x["start"], x["end"])):
+            if current is None or entry["start"] > current["end"] + max_break:
+                if current is not None:
+                    current["note"] = " / ".join(notes)
+                    blocks.append((current, course))
+                current = dict(entry)
+                notes = []
+            else:
+                current["end"] = max(current["end"], entry["end"])
+                current["teachers"] = list(dict.fromkeys(
+                    current.get("teachers", []) + entry.get("teachers", [])))
+            if entry.get("note") and entry["note"] not in notes:
+                notes.append(entry["note"])
+        if current is not None:
+            current["note"] = " / ".join(notes)
+            blocks.append((current, course))
+    return sorted(blocks, key=lambda x: (x[0]["start"], x[1], tuple(x[0].get("rooms", []))))
+
 def ical(events):
     now = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "CALSCALE:GREGORIAN",
@@ -277,10 +329,11 @@ def ical(events):
              "X-WR-TIMEZONE:Europe/Berlin",
              "REFRESH-INTERVAL;VALUE=DURATION:PT3H", "X-PUBLISHED-TTL:PT3H"]
     repeats = defaultdict(int)
-    for item, course in sorted(events, key=lambda x:(x[0]["start"], x[1], x[0]["lesson"])):
-        key = (item["start"].date(), course, item["lesson"])
+    for item, course in sorted(events, key=lambda x:(x[0]["start"], x[1], tuple(x[0].get("rooms", [])))):
+        room = ", ".join(item.get("rooms", []))
+        key = (item["start"].date(), course, room)
         repeats[key] += 1
-        identity = "|".join((str(key[0]), course, item["lesson"], str(repeats[key])))
+        identity = "|".join((str(key[0]), course, room, str(repeats[key])))
         uid = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:30] + "@fk04-12me-calendar"
         description = "Dozenten: " + (", ".join(item["teachers"]) or "nicht angegeben")
         if item["note"]:
@@ -289,8 +342,8 @@ def ical(events):
         lines.extend(["BEGIN:VEVENT", "UID:" + uid, "DTSTAMP:" + now,
              "DTSTART:" + item["start"].astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ"),
              "DTEND:" + item["end"].astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ"),
-             "SUMMARY:" + escape(course),
-             "LOCATION:" + escape(", ".join(item["rooms"])),
+             "SUMMARY:" + escape((room + " · " if room else "") + course),
+             "LOCATION:" + escape(room),
              "DESCRIPTION:" + escape(description), "END:VEVENT"])
     lines.append("END:VCALENDAR")
     return "\r\n".join(map(fold, lines)) + "\r\n"
@@ -329,9 +382,10 @@ def main():
     dest = ROOT / "docs" / "stundenplan.ics"
     dest.parent.mkdir(exist_ok=True)
     temp = dest.with_suffix(".ics.tmp")
-    temp.write_bytes(ical(selected).encode("utf-8"))
+    blocks = merge_lessons(selected)
+    temp.write_bytes(ical(blocks).encode("utf-8"))
     temp.replace(dest)
-    print(f"iCal erzeugt: {len(selected)} Termine")
+    print(f"iCal erzeugt: {len(blocks)} Unterrichtsblöcke aus {len(selected)} Einzelstunden")
 
 if __name__ == "__main__":
     try:
