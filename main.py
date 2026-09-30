@@ -221,7 +221,7 @@ def login_fetch(cfg, start, end):
         # The class ID was taken from the publicly visible 12ME timetable URL.
         class_id = int(cfg["class_id"])
         for monday in mondays(start, end):
-            periods = session.timetable_extended(start=monday,
+            periods = session.timetable_extended(start=max(monday, start),
                       end=min(monday + timedelta(days=6), end), klasse=class_id)
             result.extend(row(p, "login", tz) for p in periods)
     return result
