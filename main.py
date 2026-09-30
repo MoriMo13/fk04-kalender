@@ -76,7 +76,7 @@ def row(period, source, tz):
         end += timedelta(days=1)
     return dict(start=start, end=end, subjects=names(getattr(period, "subjects", [])),
                 rooms=names(getattr(period, "rooms", [])),
-                teachers=names(getattr(period, "teachers", [])),
+                teachers=[] if source == "login" else names(getattr(period, "teachers", [])),
                 lesson=str(lesson or getattr(period, "id", "") or ""),
                 cancelled=cancelled(period),
                 note=str(getattr(period, "substText", "") or getattr(period, "info", "") or ""))
