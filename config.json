@@ -1,0 +1,40 @@
+{
+  "server": "fk04-munchen.webuntis.com",
+  "school": "FK04",
+  "class_name": "12ME",
+  "class_id": 1706,
+  "semester_start": "2026-10-01",
+  "semester_end": "2027-03-14",
+  "timezone": "Europe/Berlin",
+  "courses": {
+    "Batterien und Brennstoffzellen": [
+      "Batterien und Brennstoffzellen",
+      "Batterien & Brennstoffzellen",
+      "Batt"
+    ],
+    "Ringvorlesung Elektromobilität": [
+      "Ringvorlesung Elektromobilität",
+      "Ringvorlesung E-Mobilität",
+      "Ringvorl"
+    ],
+    "N. Energiesysteme": [
+      "N. Energiesysteme",
+      "Neue Energiesysteme",
+      "Nachhaltige Energiesysteme"
+    ],
+    "Elektroak. u. Audiotechnik": [
+      "Elektroakustik und Audiotechnik",
+      "Elektroak. u. Audiotechnik",
+      "Elektroakustik"
+    ],
+    "Felder und Wellen": [
+      "Felder und Wellen",
+      "Felder u. Wellen"
+    ],
+    "Seminar Systeme": [
+      "Seminar Systeme",
+      "Seminar System",
+      "Sem. Systeme"
+    ]
+  }
+}
