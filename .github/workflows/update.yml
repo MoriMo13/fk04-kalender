@@ -1,0 +1,43 @@
+name: FK04 Kalender aktualisieren
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 */3 * * *'
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: fk04-pages
+  cancel-in-progress: false
+jobs:
+  calendar:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Stundenplan lesen und ICS erzeugen
+        env:
+          UNTIS_USERNAME: ${{ secrets.UNTIS_USERNAME }}
+          UNTIS_PASSWORD: ${{ secrets.UNTIS_PASSWORD }}
+        run: python main.py
+      - name: Fachdiagnose speichern
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fachnamen-diagnose
+          path: diagnostics/subjects.txt
+          if-no-files-found: ignore
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+      - id: deployment
+        uses: actions/deploy-pages@v4
