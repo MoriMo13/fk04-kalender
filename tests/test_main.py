@@ -50,6 +50,13 @@ class CalendarTests(unittest.TestCase):
                  (event(45,90,"R2.093"),"Felder und Wellen"),
                  (event(150,195,"R3.012"),"Felder und Wellen")]
         self.assertEqual(len(main.merge_lessons(lessons)),3)
+    def test_stale_room_reference_does_not_abort_calendar(self):
+        class BrokenRooms:
+            _data={"date": 20261020, "startTime": 900, "ro":[{"id":99999}]}
+            @property
+            def rooms(self):
+                raise IndexError("stale room")
+        self.assertEqual(main.safe_room_names(BrokenRooms()),[])
     def test_prefer_short_room_codes(self):
         self.assertEqual(main.room_names([SimpleNamespace(name="R2.093",long_name="Raum 2.093")]),["R2.093"])
     def test_cancelled(self):
