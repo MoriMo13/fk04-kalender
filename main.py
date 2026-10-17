@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import re
 import sys
+import traceback
 import unicodedata
 from zoneinfo import ZoneInfo
 
@@ -266,6 +267,8 @@ def fetch(cfg, start, end):
             return method, data
         except Exception as e:
             print(f"{method} gescheitert: {type(e).__name__}: {e}", file=sys.stderr)
+            if method == "login":
+                traceback.print_exc()
             errors.append(f"{method}: {type(e).__name__}: {e}")
     raise RuntimeError("Kein Abruf möglich: " + " | ".join(errors))
 
