@@ -47,6 +47,23 @@ def room_names(items):
             out.append(value)
     return out
 
+def safe_room_names(period):
+    """Resolve WebUntis rooms without letting one stale room ID abort the calendar."""
+    try:
+        return room_names(getattr(period, "rooms", []))
+    except IndexError:
+        raw = getattr(period, "_data", {}) or {}
+        ids = [str(x.get("id")) for x in raw.get("ro", []) if isinstance(x, dict) and x.get("id") is not None]
+        print(
+            "WARNUNG: WebUntis verweist auf eine unbekannte Raum-ID"
+            + (f" ({', '.join(ids)})" if ids else "")
+            + f" bei Termin {raw.get('date', '?')} {raw.get('startTime', '?')}. "
+              "Termin wird ohne Raum übernommen.",
+            file=sys.stderr,
+            flush=True,
+        )
+        return []
+
 def course_for(subjects, courses):
     for course, aliases in courses.items():
         for subject in subjects:
@@ -92,7 +109,7 @@ def row(period, source, tz):
     if end <= start:
         end += timedelta(days=1)
     return dict(start=start, end=end, subjects=names(getattr(period, "subjects", [])),
-                rooms=room_names(getattr(period, "rooms", [])),
+                rooms=safe_room_names(period) if source == "login" else room_names(getattr(period, "rooms", [])),
                 teachers=[] if source == "login" else names(getattr(period, "teachers", [])),
                 lesson=str(lesson or getattr(period, "id", "") or ""),
                 cancelled=cancelled(period),
